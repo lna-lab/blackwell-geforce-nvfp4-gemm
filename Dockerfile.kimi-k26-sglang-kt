@@ -1,0 +1,19 @@
+# =============================================================================
+# Kimi-K2.6 NVFP4A16 on SM120 via SGLang + KTransformers
+# Base: lna-lab/kimi-k26-sglang:latest (NVFP4A16 MoE dispatch patched)
+# Added: kt-kernel for CPU/GPU hybrid expert offload
+# =============================================================================
+FROM lna-lab/kimi-k26-sglang:latest
+
+LABEL description="Kimi-K2.6 1T MoE NVFP4A16 + KTransformers hybrid (SM120 + AVX512)"
+
+# ---- Install kt-kernel ----
+RUN pip install kt-kernel --no-deps 2>/dev/null || pip install kt-kernel
+
+# API compat patch: SGLang num_gpu_experts → kt-kernel gpu_experts_mask
+COPY patch-sglang-kt-api-compat.py /tmp/patch3.py
+COPY patch-sglang-kt-num-experts.py /tmp/patch4.py
+COPY patch-sglang-kt-mask-fix.py /tmp/patch5.py
+RUN python3 /tmp/patch3.py && python3 /tmp/patch4.py && python3 /tmp/patch5.py && rm /tmp/patch3.py /tmp/patch4.py /tmp/patch5.py
+
+ENTRYPOINT ["python3", "-m", "sglang.launch_server"]

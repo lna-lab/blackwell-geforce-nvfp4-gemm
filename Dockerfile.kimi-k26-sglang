@@ -1,0 +1,15 @@
+# =============================================================================
+# Kimi-K2.6 NVFP4A16 on SM120 via SGLang
+# Base: lmsysorg/sglang:v0.5.10.post1-cu130 (SM120 native support)
+# Added: NVFP4A16 MoE dispatch patch
+# =============================================================================
+FROM lmsysorg/sglang:v0.5.10.post1-cu130
+
+LABEL description="Kimi-K2.6 1T MoE NVFP4A16 inference on SM120 (SGLang + flashinfer_cudnn)"
+
+# ---- NVFP4A16 MoE dispatch patch ----
+COPY patch-sglang-nvfp4a16-moe.py /tmp/patch1.py
+COPY patch-sglang-offloader-nvfp4.py /tmp/patch2.py
+RUN python3 /tmp/patch1.py && python3 /tmp/patch2.py && rm /tmp/patch1.py /tmp/patch2.py
+
+ENTRYPOINT ["python3", "-m", "sglang.launch_server"]

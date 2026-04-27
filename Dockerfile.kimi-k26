@@ -1,0 +1,44 @@
+# =============================================================================
+# Kimi-K2.6 NVFP4 on SM120 (RTX PRO 6000 Blackwell)
+# Base: lna-lab/gemma4-inference:latest (vLLM 0.19.1 + SM120 patches)
+# Added: MLA CC12 + NVFP4 oracle SM120 patch (VLLM_CUTLASS preferred)
+# =============================================================================
+FROM lna-lab/gemma4-inference:latest
+
+LABEL description="Kimi-K2.6 1T MoE NVFP4 inference on SM120 (vLLM + CUTLASS MoE)"
+
+# ---- MLA CC12 hack ----
+RUN SITE=/usr/local/lib/python3.12/dist-packages && \
+    for f in \
+        $SITE/vllm/v1/attention/backends/mla/cutlass_mla.py \
+        $SITE/vllm/v1/attention/backends/mla/flashinfer_mla.py \
+        $SITE/vllm/v1/attention/backends/mla/flashinfer_mla_sparse.py; do \
+        if [ -f "$f" ]; then \
+            sed -i 's/return capability.major == 10/return capability.major in (10, 12)/g' "$f"; \
+        fi; \
+    done && \
+    sed -i 's/if device_capability.major == 10:/if device_capability.major in (10, 12):/g' \
+        $SITE/vllm/platforms/cuda.py && \
+    echo "MLA CC12 hack applied."
+
+# ---- NVFP4 oracle SM120 patch ----
+# Skip SM100-only FlashInfer backends, use VLLM_CUTLASS (patched for SM120)
+COPY patch-nvfp4-oracle-sm120.py /tmp/patch-nvfp4-oracle-sm120.py
+RUN python3 /tmp/patch-nvfp4-oracle-sm120.py && rm /tmp/patch-nvfp4-oracle-sm120.py
+
+# ---- Custom entrypoint with PP support ----
+COPY entrypoint-kimi-k26.sh /opt/lna-lab/entrypoint.sh
+RUN chmod +x /opt/lna-lab/entrypoint.sh
+
+# ---- Defaults for K2.6 ----
+ENV MODEL_PATH=/models/current
+ENV PORT=8016
+ENV TENSOR_PARALLEL_SIZE=1
+ENV PIPELINE_PARALLEL_SIZE=6
+ENV MAX_MODEL_LEN=8192
+ENV MAX_NUM_SEQS=4
+ENV GPU_MEMORY_UTILIZATION=0.95
+ENV QUANTIZATION=auto
+ENV VLLM_CUDA_GRAPH_MODE=piecewise
+
+ENTRYPOINT ["/opt/lna-lab/entrypoint.sh"]
